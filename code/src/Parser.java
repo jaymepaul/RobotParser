@@ -83,14 +83,20 @@ public class Parser {
 	static Pattern CLOSEPAREN = Pattern.compile("\\)");
 	static Pattern OPENBRACE = Pattern.compile("\\{");
 	static Pattern CLOSEBRACE = Pattern.compile("\\}");
-	static Pattern ACTION = Pattern.compile(":? (move|turnL|turnR|takeFuel|wait)");
+	static Pattern ACTION = Pattern.compile("move|turnL|turnR|takeFuel|wait");
 
 	/**
 	 * PROG ::= STMT+
 	 */
 	static RobotProgramNode parseProgram(Scanner s) {
 		// THE PARSER GOES HERE
-		return parseStatementNode(s);
+
+		StatementNode n = parseStatementNode(s);			//Instantiate New Statement
+
+		//How to insert all statements in ONE NODE???
+
+
+		return n;
 	}
 
 	// utility methods for the parser
@@ -102,7 +108,10 @@ public class Parser {
 
 		RobotProgramNode type = null;
 
-		if(s.hasNext(ACTION))			type = parseAction(s);
+		if(s.hasNext(ACTION)){
+			type = parseAction(s);
+			require(";", "Expecting ';' ", s);
+		}
 		if(s.hasNext("loop"))			type = parseLoop(s);
 
 		return new StatementNode(type);
@@ -236,12 +245,17 @@ enum ACTION{move,turnL,turnR,takeFuel,wait,loop}
 class MoveNode implements RobotProgramNode{
 
 
+	int moveSteps = 0;
 
 
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
 		robot.move();
+	}
+
+	public String toString(){
+		return "Move";
 	}
 
 }
@@ -256,6 +270,11 @@ class TurnLNode implements RobotProgramNode{
 		robot.turnLeft();
 	}
 
+	public String toString(){
+		return "TurnL ";
+	}
+
+
 }
 
 class TurnRNode implements RobotProgramNode{
@@ -265,6 +284,10 @@ class TurnRNode implements RobotProgramNode{
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
 		robot.turnRight();
+	}
+
+	public String toString(){
+		return "TurnR";
 	}
 
 }
@@ -278,15 +301,23 @@ class TakeFuelNode implements RobotProgramNode{
 		robot.takeFuel();
 	}
 
+	public String toString(){
+		return "TakeFuel";
+	}
+
 }
 class WaitNode implements RobotProgramNode{
 
-
+	int waitAmount = 0;
 
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
 		robot.idleWait();
+	}
+
+	public String toString(){
+		return "Wait";
 	}
 
 }
@@ -302,23 +333,30 @@ class ActionNode implements RobotProgramNode{
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
-		n.execute(robot);
+		n.execute(robot);						//Call execute on ActionObject (move,turnR,L etc)
 	}
 
+	public String toString(){
+		return "ACT "+this.n +"\n";
+	}
 }
 
 class LoopNode implements RobotProgramNode{
 
-	BlockNode n;
+	BlockNode block;
 
 	public LoopNode(BlockNode b){
-		this.n = b;
+		this.block = b;
 	}
 
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
-		n.execute(robot);
+		block.execute(robot);
+	}
+
+	public String toString(){
+		return "LOOP " + this.block +"\n";
 	}
 
 }
@@ -336,6 +374,10 @@ class BlockNode implements RobotProgramNode{
 		// TODO Auto-generated method stub
 		n.execute(robot);
 	}
+
+	public String toString(){
+		return "BLOCK " + this.n+"\n";
+	}
 }
 
 class StatementNode implements RobotProgramNode{
@@ -344,7 +386,9 @@ class StatementNode implements RobotProgramNode{
 	RobotProgramNode n;				//ACT/LOOP
 
 	public StatementNode(RobotProgramNode n){
+
 		this.n = n;
+
 	}
 
 	@Override
@@ -353,6 +397,10 @@ class StatementNode implements RobotProgramNode{
 
 	}
 
+	public String toString(){
+
+		return "STMT " + this.n +"\n";
+	}
 
 
 
@@ -368,7 +416,9 @@ class ProgramNode implements RobotProgramNode{
 
 	}
 
-
+	public String toString(){
+		return "PROG ::= "+this.n+"\n";
+	}
 }
 
 
