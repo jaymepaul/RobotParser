@@ -90,13 +90,14 @@ public class Parser {
 	 */
 	static RobotProgramNode parseProgram(Scanner s) {
 		// THE PARSER GOES HERE
-
-		StatementNode n = parseStatementNode(s);			//Instantiate New Statement
-
+		
+		ProgramNode main = new ProgramNode();
+		
 		//How to insert all statements in ONE NODE???
+		while(s.hasNext())
+			main.getStatements().add(parseStatementNode(s));
 
-
-		return n;
+		return main;
 	}
 
 	// utility methods for the parser
@@ -112,7 +113,12 @@ public class Parser {
 			type = parseAction(s);
 			require(";", "Expecting ';' ", s);
 		}
-		if(s.hasNext("loop"))			type = parseLoop(s);
+		else if(s.hasNext("loop")) {
+			type = parseLoop(s);
+		}
+		else{
+			throw new ParserFailureException("Statement unable to be parsed - next token is: " + s.next());
+		}
 
 		return new StatementNode(type);
 	}
@@ -352,7 +358,8 @@ class LoopNode implements RobotProgramNode{
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
-		block.execute(robot);
+		while(true)
+			block.execute(robot);
 	}
 
 	public String toString(){
@@ -379,6 +386,12 @@ class BlockNode implements RobotProgramNode{
 		return "BLOCK " + this.n+"\n";
 	}
 }
+
+
+//NOTE: interface StatementNode extends RobotProgramNode
+// ActionNode implements StatementNode 		i.e. STMT = ACT 
+// LoopNode implements StatementNode 		i.e. STMT = LOOP
+// NON-TERMINALS AS INTERFACES, never going to be making one of that class
 
 class StatementNode implements RobotProgramNode{
 
@@ -408,16 +421,32 @@ class StatementNode implements RobotProgramNode{
 
 class ProgramNode implements RobotProgramNode{
 
-	RobotProgramNode n;				//STMT
+	
+	List<StatementNode> statements;
+	
+	public ProgramNode(){
+		this.statements = new ArrayList<StatementNode>();
+	}
 
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
 
 	}
+	
+	
+
+	public List<StatementNode> getStatements() {
+		return statements;
+	}
 
 	public String toString(){
-		return "PROG ::= "+this.n+"\n";
+		StringBuilder sb = new StringBuilder();
+		
+		for(StatementNode sn: statements)
+			sb.append("PROG "+sn.n+"\n");
+		
+		return sb.toString();
 	}
 }
 
