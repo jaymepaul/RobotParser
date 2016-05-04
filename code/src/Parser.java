@@ -83,7 +83,8 @@ public class Parser {
 	static Pattern CLOSEPAREN = Pattern.compile("\\)");
 	static Pattern OPENBRACE = Pattern.compile("\\{");
 	static Pattern CLOSEBRACE = Pattern.compile("\\}");
-	static Pattern ACTION = Pattern.compile("move|turnL|turnR|takeFuel|wait");
+	static Pattern ACTION = Pattern.compile("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait");
+	static Pattern SENSOR = Pattern.compile("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist");
 
 	/**
 	 * PROG ::= STMT+
@@ -93,7 +94,6 @@ public class Parser {
 		
 		ProgramNode main = new ProgramNode();
 		
-		//How to insert all statements in ONE NODE???
 		while(s.hasNext())
 			main.getStatements().add(parseStatementNode(s));
 
@@ -107,46 +107,91 @@ public class Parser {
 	 * */
 	static StatementNode parseStatementNode(Scanner s){
 
-		RobotProgramNode type = null;
+		StatementNode stmt = null;
 
-		if(s.hasNext(ACTION)){
-			type = parseAction(s);
-			require(";", "Expecting ';' ", s);
-		}
-		else if(s.hasNext("loop")) {
-			type = parseLoop(s);
-		}
+		if(s.hasNext(ACTION))
+			stmt = parseAction(s);
+		else if(checkFor("loop", s)) 
+			stmt = parseLoop(s);
+		else if(checkFor("while", s))
+			stmt = parseWhile(s);
+		else if(checkFor("if", s))
+			stmt = parseIf(s);
 		else{
-			throw new ParserFailureException("Statement unable to be parsed - next token is: " + s.next());
+			fail("Expecting an ACT or LOOP", s);
 		}
 
-		return new StatementNode(type);
+		return stmt;
 	}
 
 	/**
-	 * ACT ::= move|turnL|turnR|takeFuel|move
+	 * ACT ::= move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait
 	 * */
 	static ActionNode parseAction(Scanner s){
 
-		RobotProgramNode type = null;
+		ActionNode act = null;
 
-		if(checkFor("move", s))			type = new MoveNode();
-		if(checkFor("turnL", s))		type = new TurnLNode();
-		if(checkFor("turnR", s))		type = new TurnRNode();
-		if(checkFor("takeFuel", s))		type = new TakeFuelNode();
-		if(checkFor("wait", s))			type = new WaitNode();
+		if(checkFor("move", s))			act = new MoveNode();
+		if(checkFor("turnL", s))		act = new TurnLNode();
+		if(checkFor("turnR", s))		act = new TurnRNode();
+		if(checkFor("turnAround", s))	act = new TurnAroundNode();
+		if(checkFor("shieldOn", s))		act = new ShieldOnNode();
+		if(checkFor("shieldOff", s))	act = new ShielfOffNode();
+		if(checkFor("takeFuel", s))		act = new TakeFuelNode();
+		if(checkFor("wait", s))			act = new WaitNode();
 
-		return new ActionNode(type);
+		require(";", "Expecting ';' ", s);
+		
+		return act;
 	}
 
 	/**
 	 * LOOP ::= loop BLOCK
 	 * */
 	static LoopNode parseLoop(Scanner s){
-
-		require("loop", "Expecting 'loop'", s);
-
 		return new LoopNode(parseBlock(s));
+	}
+	
+	/**
+	 * IF ::= if (COND) BLOCK
+	 * */
+	static IFNode parseIf(Scanner s){
+		return new IFNode(parseCondition(s), parseBlock(s));
+	}
+	
+	/**
+	 * WHILE ::= while (COND) BLOCK
+	 * */
+	static WhileNode parseWhile(Scanner s){
+		return new WhileNode(parseCondition(s), parseBlock(s));
+	}
+	
+	static ConditionalNode parseCondition(Scanner s){
+		
+		ConditionalNode condition = null;
+		require(OPENPAREN, "Expecting '(' ", s);
+		if(checkFor("gt", s))		condition = new GreaterThanNode(parseSensor(s), s.nextInt());
+		if(checkFor("lt", s))		condition = new LessThanNode(parseSensor(s), s.nextInt());
+		if(checkFor("eq", s))		condition = new EqualsNode(parseSensor(s), s.nextInt());
+		require(CLOSEPAREN, "Expecting ')' ", s);
+		
+		return condition;
+	}
+	
+	static SensorNode parseSensor(Scanner s){
+		
+		SensorNode sensor = null;
+		require(OPENPAREN, "Expecting '('", s);
+		//TODO: EDIT CHECKS!!
+		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
+		if(checkFor("barrelLR", s))		sensor = new BarrelLRNode();
+		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
+		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
+		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
+		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
+		require(",", "Expecting ','", s);
+		
+		return sensor;
 	}
 
 	/**
@@ -154,18 +199,19 @@ public class Parser {
 	 * */
 	static BlockNode parseBlock(Scanner s){
 
-		StatementNode stmt = null;
+		BlockNode block = new BlockNode();
+		
+		require(OPENBRACE, "Expecting '{'", s);
+		while(!s.hasNext("}"))
+			block.getStatements().add(parseStatementNode(s));
+		require(CLOSEBRACE, "Expecting '}' ", s);
+		
 
-		require("{", "Expecting '{'", s);
-		while(!s.hasNext("}")){
-			stmt = parseStatementNode(s);
-		}
-		require("}", "Expecting '}' ", s);
-
-		return new BlockNode(stmt);
+		return block;
 	}
 
-
+	
+	
 	/**
 	 * Report a failure in the parser.
 	 */
@@ -245,14 +291,14 @@ public class Parser {
 }
 
 // You could add the node classes here, as long as they are not declared public (or private)
-enum ACTION{move,turnL,turnR,takeFuel,wait,loop}
 
 
-class MoveNode implements RobotProgramNode{
-
+//==================================================================//
+//============================ACTION===============================//
+//=================================================================//
+class MoveNode implements ActionNode{
 
 	int moveSteps = 0;
-
 
 	@Override
 	public void execute(Robot robot) {
@@ -266,9 +312,7 @@ class MoveNode implements RobotProgramNode{
 
 }
 
-class TurnLNode implements RobotProgramNode{
-
-
+class TurnLNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
@@ -283,7 +327,7 @@ class TurnLNode implements RobotProgramNode{
 
 }
 
-class TurnRNode implements RobotProgramNode{
+class TurnRNode implements ActionNode{
 
 
 	@Override
@@ -297,9 +341,7 @@ class TurnRNode implements RobotProgramNode{
 	}
 
 }
-class TakeFuelNode implements RobotProgramNode{
-
-
+class TakeFuelNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
@@ -312,7 +354,7 @@ class TakeFuelNode implements RobotProgramNode{
 	}
 
 }
-class WaitNode implements RobotProgramNode{
+class WaitNode implements ActionNode{
 
 	int waitAmount = 0;
 
@@ -328,26 +370,55 @@ class WaitNode implements RobotProgramNode{
 
 }
 
-class ActionNode implements RobotProgramNode{
-
-	RobotProgramNode n;
-
-	public ActionNode(RobotProgramNode n){
-		this.n = n;
-	}
+class TurnAroundNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
-		n.execute(robot);						//Call execute on ActionObject (move,turnR,L etc)
+		robot.turnAround();
 	}
-
+	
 	public String toString(){
-		return "ACT "+this.n +"\n";
+		return "TurnAround";
 	}
+	
 }
 
-class LoopNode implements RobotProgramNode{
+class ShieldOnNode implements ActionNode{
+
+	@Override
+	public void execute(Robot robot) {
+		// TODO Auto-generated method stub
+		robot.setShield(true);
+	}
+	
+	public String toString(){
+		return "ShieldOn";
+	}
+	
+}
+
+class ShielfOffNode implements ActionNode{
+
+	@Override
+	public void execute(Robot robot) {
+		// TODO Auto-generated method stub
+		robot.setShield(false);
+	}
+	
+	public String toString(){
+		return "ShieldOff";
+	}
+	
+}
+
+
+
+//==================================================================//
+//============================LOOP===============================//
+//=================================================================//
+
+class LoopNode implements StatementNode{
 
 	BlockNode block;
 
@@ -367,57 +438,233 @@ class LoopNode implements RobotProgramNode{
 	}
 
 }
-class BlockNode implements RobotProgramNode{
 
-	StatementNode n;			//STMT
+//==================================================================//
+//=========================CONDITIONALS=============================//
+//=================================================================//
+class IFNode implements StatementNode{
+	
+	ConditionalNode condition;
+	BlockNode block;
+	
+	public IFNode(ConditionalNode c, BlockNode b){
+		this.condition = c;
+		this.block = b;
+	}
+	
+	@Override
+	public void execute(Robot robot) {
 
-	public BlockNode(StatementNode n){
-		this.n = n;
+		if(condition.evaluate(robot))
+			block.execute(robot);
+	}
+	
+	public String toString(){
+		return "if "+this.condition + this.block;
+	}
+	
+	
+}
+
+class WhileNode implements StatementNode{
+	
+	
+	ConditionalNode condition;
+	BlockNode block;
+	
+	public WhileNode(ConditionalNode c, BlockNode b){
+		this.condition = c;
+		this.block = b;
+	}
+	
+	@Override
+	public void execute(Robot robot) {
+		if(condition.evaluate(robot))
+			block.execute(robot);
+	}
+	
+	public String toString(){
+		return "while "+this.condition + this.block;
+	}
+	
+	
+}
+
+interface ConditionalNode{
+	public boolean evaluate(Robot robot);
+}
+
+class GreaterThanNode implements ConditionalNode{
+	
+	SensorNode sen;
+	int num;
+	
+	public GreaterThanNode(SensorNode sen, int num){
+		this.sen = sen;
+		this.num = num;
+	}
+	
+	@Override
+	public boolean evaluate(Robot robot) {
+
+		boolean bool = false;
+		if(sen.evaluate(robot) > num)
+			bool = true;
+		else
+			bool = false;
+		
+		return bool;
+	}
+}
+class LessThanNode implements ConditionalNode{
+	
+	SensorNode sen;
+	int num;
+	
+	public LessThanNode(SensorNode sen, int num){
+		this.sen = sen;
+		this.num = num;
+	}	
+	
+	@Override
+	public boolean evaluate(Robot robot) {
+		
+		boolean bool = false;
+		if(sen.evaluate(robot) < num)
+			bool = true;
+		else
+			bool = false;
+		
+		return bool;
+	}
+}
+class EqualsNode implements ConditionalNode{
+	
+	SensorNode sen;
+	int num;
+	
+	public EqualsNode(SensorNode sen, int num){
+		this.sen = sen;
+		this.num = num;
+	}
+	
+	@Override
+	public boolean evaluate(Robot robot) {
+		
+		boolean bool = false;
+		if(sen.evaluate(robot) == num)
+			bool = true;
+		else
+			bool = false;
+		
+		return bool;
+	}
+}
+
+//==================================================================//
+//============================BLOCK===============================//
+//=================================================================//
+
+
+class BlockNode implements StatementNode{
+
+	List<StatementNode> statements;		//STMT -- LIST OF STATEMENTS
+
+	public BlockNode(){
+		this.statements = new ArrayList<StatementNode>();
 	}
 
 
 	@Override
 	public void execute(Robot robot) {
 		// TODO Auto-generated method stub
-		n.execute(robot);
+		for(StatementNode sn: statements)	
+			sn.execute(robot);
 	}
+	
+	
+
+	public List<StatementNode> getStatements() {
+		return statements;
+	}
+
 
 	public String toString(){
-		return "BLOCK " + this.n+"\n";
+		
+		StringBuilder sb = new StringBuilder();
+		
+		for(StatementNode sn: statements)
+			sb.append("BLOCK "+sn+"\n");
+		
+		return sb.toString();
 	}
+
+
+
 }
 
+//==================================================================//
+//=========================SENSOR + NUM=============================//
+//=================================================================//
+interface SensorNode{	
+	public int evaluate(Robot robot);
+}
 
-//NOTE: interface StatementNode extends RobotProgramNode
-// ActionNode implements StatementNode 		i.e. STMT = ACT 
-// LoopNode implements StatementNode 		i.e. STMT = LOOP
-// NON-TERMINALS AS INTERFACES, never going to be making one of that class
-
-class StatementNode implements RobotProgramNode{
-
-
-	RobotProgramNode n;				//ACT/LOOP
-
-	public StatementNode(RobotProgramNode n){
-
-		this.n = n;
-
-	}
+class FuelLeftNode implements SensorNode{
 
 	@Override
-	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
-
+	public int evaluate(Robot robot) {
+		return robot.getFuel();
 	}
-
-	public String toString(){
-
-		return "STMT " + this.n +"\n";
-	}
-
-
-
 }
+class OppLRNode implements SensorNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		return robot.getOpponentLR();
+	}
+}
+class OppFBNode implements SensorNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		return robot.getOpponentFB();
+	}
+}
+class NumBarrelsNode implements SensorNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		return robot.numBarrels();
+	}
+}
+class BarrelLRNode implements SensorNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		int n = robot.getClosestBarrelLR();
+		return robot.getBarrelLR(n);
+	}
+}
+class BarrelFBNode implements SensorNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		int n = robot.getClosestBarrelFB();
+		return robot.getBarrelFB(n);
+	}
+}
+class WallDistNode implements SensorNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		return robot.getDistanceToWall();
+	}
+}
+
+//==================================================================//
+//============================PROGRAM===============================//
+//=================================================================//
 
 class ProgramNode implements RobotProgramNode{
 
@@ -444,12 +691,17 @@ class ProgramNode implements RobotProgramNode{
 		StringBuilder sb = new StringBuilder();
 		
 		for(StatementNode sn: statements)
-			sb.append("PROG "+sn.n+"\n");
+			sb.append(sn+"\n");
 		
 		return sb.toString();
 	}
 }
 
+
+
+//Empty Interfaces - SubTyping/Polymorphism
+interface StatementNode extends RobotProgramNode{}
+interface ActionNode extends StatementNode{}
 
 
 
