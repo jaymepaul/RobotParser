@@ -13,6 +13,8 @@ import sun.util.locale.ParseStatus;
  */
 public class Parser {
 
+	static int depthCounter = 0;		//Used for nested loop alignment
+	
 	/**
 	 * Top level parse method, called by the World
 	 */
@@ -109,16 +111,12 @@ public class Parser {
 
 		StatementNode stmt = null;
 
-		if(s.hasNext(ACTION))
-			stmt = parseAction(s);
-		else if(checkFor("loop", s)) 
-			stmt = parseLoop(s);
-		else if(checkFor("while", s))
-			stmt = parseWhile(s);
-		else if(checkFor("if", s))
-			stmt = parseIf(s);
+		if(s.hasNext(ACTION))				stmt = parseAction(s);
+		else if(checkFor("loop", s)) 		stmt = parseLoop(s);
+		else if(checkFor("while", s))		stmt = parseWhile(s);
+		else if(checkFor("if", s))			stmt = parseIf(s);
 		else{
-			fail("Expecting an ACT or LOOP", s);
+			fail("Expecting ACT|LOOP|WHILE|IF", s);
 		}
 
 		return stmt;
@@ -131,14 +129,15 @@ public class Parser {
 
 		ActionNode act = null;
 
-		if(checkFor("move", s))			act = new MoveNode();
-		if(checkFor("turnL", s))		act = new TurnLNode();
-		if(checkFor("turnR", s))		act = new TurnRNode();
-		if(checkFor("turnAround", s))	act = new TurnAroundNode();
-		if(checkFor("shieldOn", s))		act = new ShieldOnNode();
-		if(checkFor("shieldOff", s))	act = new ShielfOffNode();
-		if(checkFor("takeFuel", s))		act = new TakeFuelNode();
-		if(checkFor("wait", s))			act = new WaitNode();
+		if(checkFor("move", s))					act = new MoveNode();
+		else if(checkFor("turnL", s))			act = new TurnLNode();
+		else if(checkFor("turnR", s))			act = new TurnRNode();
+		else if(checkFor("turnAround", s))		act = new TurnAroundNode();
+		else if(checkFor("shieldOn", s))		act = new ShieldOnNode();
+		else if(checkFor("shieldOff", s))		act = new ShielfOffNode();
+		else if(checkFor("takeFuel", s))		act = new TakeFuelNode();
+		else if(checkFor("wait", s))			act = new WaitNode();
+	
 
 		require(";", "Expecting ';' ", s);
 		
@@ -166,32 +165,55 @@ public class Parser {
 		return new WhileNode(parseCondition(s), parseBlock(s));
 	}
 	
+	/**
+	 * COND ::= lt (SEN, NUM) | gt(SEN, NUM) | eq(SEN, NUM)
+	 * */
 	static ConditionalNode parseCondition(Scanner s){
 		
 		ConditionalNode condition = null;
 		require(OPENPAREN, "Expecting '(' ", s);
-		if(checkFor("gt", s))		condition = new GreaterThanNode(parseSensor(s), s.nextInt());
-		if(checkFor("lt", s))		condition = new LessThanNode(parseSensor(s), s.nextInt());
-		if(checkFor("eq", s))		condition = new EqualsNode(parseSensor(s), s.nextInt());
+		if(checkFor("gt", s))			condition = new GreaterThanNode(parseSensor(s), parseNumber(s));
+		else if(checkFor("lt", s))		condition = new LessThanNode(parseSensor(s), parseNumber(s));
+		else if(checkFor("eq", s))		condition = new EqualsNode(parseSensor(s), parseNumber(s));
+//		else
+//			fail("Expecting gt|lt|eq", s);
 		require(CLOSEPAREN, "Expecting ')' ", s);
 		
 		return condition;
 	}
 	
+	/**
+	 * SEN ::= fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist
+	 * */
 	static SensorNode parseSensor(Scanner s){
 		
 		SensorNode sensor = null;
 		require(OPENPAREN, "Expecting '('", s);
 		//TODO: EDIT CHECKS!!
-		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
-		if(checkFor("barrelLR", s))		sensor = new BarrelLRNode();
-		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
-		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
-		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
-		if(checkFor("barrelFB", s))		sensor = new BarrelFBNode();
+		if(checkFor("fuelLeft", s))					sensor = new FuelLeftNode();
+		else if(checkFor("oppLR", s))				sensor = new OppLRNode();
+		else if(checkFor("oppFB", s))				sensor = new OppFBNode();
+		else if(checkFor("numBarrels", s))			sensor = new NumBarrelsNode();
+		else if(checkFor("barrelFB", s))			sensor = new BarrelFBNode();
+		else if(checkFor("barrelLR", s))			sensor = new BarrelLRNode();
+		else if(checkFor("wallDist", s))			sensor = new WallDistNode();
+//		else
+//			fail("Expecting fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist", s);
 		require(",", "Expecting ','", s);
 		
 		return sensor;
+	}
+	
+	/**
+	 * NUM ::= "-?[0-9]+"
+	 * */
+	static NumberNode parseNumber(Scanner s){
+		
+		int num = Integer.parseInt(require(NUMPAT, "Expecting [0-9]", s));
+		NumberNode numberNode = new NumberNode(num);
+		require(CLOSEPAREN, "Expecting ')' ",s);
+		
+		return numberNode;
 	}
 
 	/**
@@ -201,9 +223,14 @@ public class Parser {
 
 		BlockNode block = new BlockNode();
 		
+		
 		require(OPENBRACE, "Expecting '{'", s);
-		while(!s.hasNext("}"))
+		while(!s.hasNext(CLOSEBRACE) && s.hasNextLine())
 			block.getStatements().add(parseStatementNode(s));
+		
+		if(block.getStatements().size() == 0)
+			fail("Empty BLOCK - Requires 1 or more Statements", s);
+		
 		require(CLOSEBRACE, "Expecting '}' ", s);
 		
 
@@ -302,12 +329,11 @@ class MoveNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.move();
 	}
 
 	public String toString(){
-		return "Move";
+		return "Move;";
 	}
 
 }
@@ -316,12 +342,11 @@ class TurnLNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.turnLeft();
 	}
 
 	public String toString(){
-		return "TurnL ";
+		return "TurnL;";
 	}
 
 
@@ -332,12 +357,11 @@ class TurnRNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.turnRight();
 	}
 
 	public String toString(){
-		return "TurnR";
+		return "TurnR;";
 	}
 
 }
@@ -345,12 +369,11 @@ class TakeFuelNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.takeFuel();
 	}
 
 	public String toString(){
-		return "TakeFuel";
+		return "TakeFuel;";
 	}
 
 }
@@ -360,12 +383,11 @@ class WaitNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.idleWait();
 	}
 
 	public String toString(){
-		return "Wait";
+		return "Wait;";
 	}
 
 }
@@ -374,12 +396,11 @@ class TurnAroundNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.turnAround();
 	}
 	
 	public String toString(){
-		return "TurnAround";
+		return "TurnAround;";
 	}
 	
 }
@@ -388,12 +409,11 @@ class ShieldOnNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.setShield(true);
 	}
 	
 	public String toString(){
-		return "ShieldOn";
+		return "ShieldOn;";
 	}
 	
 }
@@ -402,12 +422,11 @@ class ShielfOffNode implements ActionNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		robot.setShield(false);
 	}
 	
 	public String toString(){
-		return "ShieldOff";
+		return "ShieldOff;";
 	}
 	
 }
@@ -428,13 +447,12 @@ class LoopNode implements StatementNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		while(true)
 			block.execute(robot);
 	}
 
 	public String toString(){
-		return "LOOP " + this.block +"\n";
+		return "loop \n" + this.block;
 	}
 
 }
@@ -460,7 +478,7 @@ class IFNode implements StatementNode{
 	}
 	
 	public String toString(){
-		return "if "+this.condition + this.block;
+		return "if ("+this.condition +" )"+ this.block;
 	}
 	
 	
@@ -484,7 +502,7 @@ class WhileNode implements StatementNode{
 	}
 	
 	public String toString(){
-		return "while "+this.condition + this.block;
+		return "while ( "+this.condition + " )" +this.block;
 	}
 	
 	
@@ -497,9 +515,9 @@ interface ConditionalNode{
 class GreaterThanNode implements ConditionalNode{
 	
 	SensorNode sen;
-	int num;
+	NumberNode num;
 	
-	public GreaterThanNode(SensorNode sen, int num){
+	public GreaterThanNode(SensorNode sen, NumberNode num){
 		this.sen = sen;
 		this.num = num;
 	}
@@ -508,20 +526,24 @@ class GreaterThanNode implements ConditionalNode{
 	public boolean evaluate(Robot robot) {
 
 		boolean bool = false;
-		if(sen.evaluate(robot) > num)
+		if(sen.evaluate(robot) > num.getNum())
 			bool = true;
 		else
 			bool = false;
 		
 		return bool;
 	}
+	
+	public String toString(){
+		return "gt( "+sen.toString()+" , "+ num.getNum() + " )";
+	}
 }
 class LessThanNode implements ConditionalNode{
 	
 	SensorNode sen;
-	int num;
+	NumberNode num;
 	
-	public LessThanNode(SensorNode sen, int num){
+	public LessThanNode(SensorNode sen, NumberNode num){
 		this.sen = sen;
 		this.num = num;
 	}	
@@ -530,20 +552,24 @@ class LessThanNode implements ConditionalNode{
 	public boolean evaluate(Robot robot) {
 		
 		boolean bool = false;
-		if(sen.evaluate(robot) < num)
+		if(sen.evaluate(robot) < num.getNum())
 			bool = true;
 		else
 			bool = false;
 		
 		return bool;
 	}
+	
+	public String toString(){
+		return "lt( "+sen.toString()+" , "+ num.getNum() + " )";
+	}
 }
 class EqualsNode implements ConditionalNode{
 	
 	SensorNode sen;
-	int num;
+	NumberNode num;
 	
-	public EqualsNode(SensorNode sen, int num){
+	public EqualsNode(SensorNode sen, NumberNode num){
 		this.sen = sen;
 		this.num = num;
 	}
@@ -552,12 +578,16 @@ class EqualsNode implements ConditionalNode{
 	public boolean evaluate(Robot robot) {
 		
 		boolean bool = false;
-		if(sen.evaluate(robot) == num)
+		if(sen.evaluate(robot) == num.getNum())
 			bool = true;
 		else
 			bool = false;
 		
 		return bool;
+	}
+	
+	public String toString(){
+		return "eq( "+sen.toString()+" , "+ num.getNum() + " )";
 	}
 }
 
@@ -569,7 +599,8 @@ class EqualsNode implements ConditionalNode{
 class BlockNode implements StatementNode{
 
 	List<StatementNode> statements;		//STMT -- LIST OF STATEMENTS
-
+	int tabCounter = 0;
+	
 	public BlockNode(){
 		this.statements = new ArrayList<StatementNode>();
 	}
@@ -577,7 +608,6 @@ class BlockNode implements StatementNode{
 
 	@Override
 	public void execute(Robot robot) {
-		// TODO Auto-generated method stub
 		for(StatementNode sn: statements)	
 			sn.execute(robot);
 	}
@@ -593,8 +623,27 @@ class BlockNode implements StatementNode{
 		
 		StringBuilder sb = new StringBuilder();
 		
-		for(StatementNode sn: statements)
-			sb.append("BLOCK "+sn+"\n");
+		//HOW MUCH TO TAB BY BASED ON HOW NESTED THE BLOCK IS??
+		// - Global Depth Counter , Start at 1 - if its a block should be tabbed by 1
+		// - When new Block is created increment by 1, set its tabCounter
+		// - When Block is finished reset to 0
+		// - How to tab x amount of times	repeated = new String(new char[n]).replace("\0", s);
+		// - n = number of times to repeat, s = string to repeat
+		// - i.e. String tabRepeat = new String(new char[n]).replace("\0", "\t");
+		// n = globalDepthCount;
+		
+		String tabRepeat = null;
+		
+		Parser.depthCounter++;
+		sb.append( "{ \n" );
+
+		for(StatementNode sn: statements){
+			tabRepeat = new String(new char[Parser.depthCounter]).replace("\0", "\t");
+			sb.append(tabRepeat+sn+"\n");
+		}
+		Parser.depthCounter--;
+		tabRepeat = new String(new char[Parser.depthCounter]).replace("\0", "\t");
+		sb.append( tabRepeat+"}" );
 		
 		return sb.toString();
 	}
@@ -616,12 +665,20 @@ class FuelLeftNode implements SensorNode{
 	public int evaluate(Robot robot) {
 		return robot.getFuel();
 	}
+	
+	public String toString(){
+		return "FuelLeft";
+	}
 }
 class OppLRNode implements SensorNode{
 
 	@Override
 	public int evaluate(Robot robot) {
 		return robot.getOpponentLR();
+	}
+	
+	public String toString(){
+		return "OppLR";
 	}
 }
 class OppFBNode implements SensorNode{
@@ -630,12 +687,20 @@ class OppFBNode implements SensorNode{
 	public int evaluate(Robot robot) {
 		return robot.getOpponentFB();
 	}
+	
+	public String toString(){
+		return "OppFB";
+	}
 }
 class NumBarrelsNode implements SensorNode{
 
 	@Override
 	public int evaluate(Robot robot) {
 		return robot.numBarrels();
+	}
+	
+	public String toString(){
+		return "NumBarrels";
 	}
 }
 class BarrelLRNode implements SensorNode{
@@ -645,6 +710,10 @@ class BarrelLRNode implements SensorNode{
 		int n = robot.getClosestBarrelLR();
 		return robot.getBarrelLR(n);
 	}
+	
+	public String toString(){
+		return "BarrelLR";
+	}
 }
 class BarrelFBNode implements SensorNode{
 
@@ -653,12 +722,32 @@ class BarrelFBNode implements SensorNode{
 		int n = robot.getClosestBarrelFB();
 		return robot.getBarrelFB(n);
 	}
+	
+	public String toString(){
+		return "BarrelFB";
+	}
 }
 class WallDistNode implements SensorNode{
 
 	@Override
 	public int evaluate(Robot robot) {
 		return robot.getDistanceToWall();
+	}
+	
+	public String toString(){
+		return "WallDist";
+	}
+}
+class NumberNode{
+	
+	int num;
+	
+	public NumberNode(int num){
+		this.num = num;
+	}
+	
+	public int getNum(){
+		return num;
 	}
 }
 
