@@ -87,6 +87,7 @@ public class Parser {
 	static Pattern CLOSEBRACE = Pattern.compile("\\}");
 	static Pattern ACTION = Pattern.compile("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait");
 	static Pattern SENSOR = Pattern.compile("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist");
+	static Pattern OPERATORS = Pattern.compile("add|sub|mul|div");
 
 	/**
 	 * PROG ::= STMT+
@@ -129,14 +130,31 @@ public class Parser {
 
 		ActionNode act = null;
 
-		if(checkFor("move", s))					act = new MoveNode();
+		if(checkFor("move", s)){
+			
+			if(checkFor(OPENPAREN, s)){
+				act = new MoveNode(parseEXP(s));
+				require(CLOSEPAREN, "Expecting ')' ",s);
+			}
+			else
+				act = new MoveNode();
+			
+		}					
 		else if(checkFor("turnL", s))			act = new TurnLNode();
 		else if(checkFor("turnR", s))			act = new TurnRNode();
 		else if(checkFor("turnAround", s))		act = new TurnAroundNode();
 		else if(checkFor("shieldOn", s))		act = new ShieldOnNode();
 		else if(checkFor("shieldOff", s))		act = new ShielfOffNode();
 		else if(checkFor("takeFuel", s))		act = new TakeFuelNode();
-		else if(checkFor("wait", s))			act = new WaitNode();
+		else if(checkFor("wait", s)){
+			
+			if(checkFor(OPENPAREN, s)){
+				act = new WaitNode(parseEXP(s));
+				require(CLOSEPAREN, "Expecting ')' ",s);
+			}
+			else
+				act = new WaitNode();
+		}			
 	
 
 		require(";", "Expecting ';' ", s);
@@ -152,32 +170,97 @@ public class Parser {
 	}
 	
 	/**
-	 * IF ::= if (COND) BLOCK
+	 * IF ::= if ( COND ) BLOCK [ else BLOCK ]
 	 * */
 	static IFNode parseIf(Scanner s){
-		return new IFNode(parseCondition(s), parseBlock(s));
+		
+		
+		require(OPENPAREN, "Expecting '('", s);
+		ConditionalNode condition = parseCondition(s);
+		require(CLOSEPAREN, "Expecting ')'", s);
+		BlockNode block = parseBlock(s);
+		
+		IFNode iN = new IFNode(condition, block);
+		
+		if(checkFor("else", s))		
+			iN.setElseBlock(parseBlock(s));
+		
+		return iN;
 	}
 	
 	/**
 	 * WHILE ::= while (COND) BLOCK
 	 * */
 	static WhileNode parseWhile(Scanner s){
-		return new WhileNode(parseCondition(s), parseBlock(s));
+		
+		require(OPENPAREN, "Expecting '(' ", s);
+		ConditionalNode condition = parseCondition(s);
+		require(CLOSEPAREN, "Expecting ')'", s);
+		BlockNode block = parseBlock(s);
+		
+		return new WhileNode(condition, block);
 	}
 	
 	/**
-	 * COND ::= lt (SEN, NUM) | gt(SEN, NUM) | eq(SEN, NUM)
+	 * COND ::= and ( COND, COND ) | or ( COND, COND ) | not ( COND ) | lt ( EXP, EXP )  |
+	  gt ( EXP, EXP )  | eq ( EXP, EXP )
 	 * */
 	static ConditionalNode parseCondition(Scanner s){
 		
 		ConditionalNode condition = null;
-		require(OPENPAREN, "Expecting '(' ", s);
-		if(checkFor("gt", s))			condition = new GreaterThanNode(parseSensor(s), parseNumber(s));
-		else if(checkFor("lt", s))		condition = new LessThanNode(parseSensor(s), parseNumber(s));
-		else if(checkFor("eq", s))		condition = new EqualsNode(parseSensor(s), parseNumber(s));
-//		else
-//			fail("Expecting gt|lt|eq", s);
-		require(CLOSEPAREN, "Expecting ')' ", s);
+		
+		if(checkFor("and", s)){
+			//NEED CHECKS:
+			require(OPENPAREN, "Expecting '('", s);
+			ConditionalNode c1 = parseCondition(s);
+			require(",", "Expecting ','", s);
+			ConditionalNode c2 = parseCondition(s);
+			require(CLOSEPAREN, "Expecting ')'", s);
+			condition = new AndNode(c1,c2);
+		}				
+		else if(checkFor("or", s)){
+			require(OPENPAREN, "Expecting '('", s);
+			ConditionalNode c1 = parseCondition(s);
+			require(",", "Expecting ','", s);
+			ConditionalNode c2 = parseCondition(s);
+			require(CLOSEPAREN, "Expecting ')' ", s);
+			condition = new OrNode(c1, c2);
+		}			
+		else if(checkFor("not", s)){
+			require(OPENPAREN, "Expecting '('", s);
+			ConditionalNode c = parseCondition(s);
+			require(CLOSEPAREN, "Expecting ')' ", s);
+			condition = new NotNode(c);
+		}			
+		else if(checkFor("gt", s)){
+			require(OPENPAREN, "Expecting '('", s);
+			ExpressionNode e1 = parseEXP(s);
+			require(",", "Expecting ','", s);
+			ExpressionNode e2 = parseEXP(s);
+			require(CLOSEPAREN, "Expecting ')' ", s);
+			condition = new GreaterThanNode(e1, e2);
+		}			
+		else if(checkFor("lt", s)){
+			require(OPENPAREN, "Expecting '('", s);
+			ExpressionNode e1 = parseEXP(s);
+			require(",", "Expecting ','", s);
+			ExpressionNode e2 = parseEXP(s);
+			require(CLOSEPAREN, "Expecting ')' ", s);
+			condition = new LessThanNode(e1, e2);
+		}		
+		else if(checkFor("eq", s)){
+			require(OPENPAREN, "Expecting '('", s);
+			ExpressionNode e1 = parseEXP(s);
+			require(",", "Expecting ','", s);
+			ExpressionNode e2 = parseEXP(s);
+			require(CLOSEPAREN, "Expecting ')' ", s);
+			condition = new EqualsNode(e1, e2);
+		}
+		else{
+			fail("Expecting a COND ::= and|or|not|gt|lt|eq", s);
+		}
+		
+		
 		
 		return condition;
 	}
@@ -188,8 +271,7 @@ public class Parser {
 	static SensorNode parseSensor(Scanner s){
 		
 		SensorNode sensor = null;
-		require(OPENPAREN, "Expecting '('", s);
-		//TODO: EDIT CHECKS!!
+
 		if(checkFor("fuelLeft", s))					sensor = new FuelLeftNode();
 		else if(checkFor("oppLR", s))				sensor = new OppLRNode();
 		else if(checkFor("oppFB", s))				sensor = new OppFBNode();
@@ -199,8 +281,7 @@ public class Parser {
 		else if(checkFor("wallDist", s))			sensor = new WallDistNode();
 //		else
 //			fail("Expecting fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist", s);
-		require(",", "Expecting ','", s);
-		
+
 		return sensor;
 	}
 	
@@ -211,9 +292,50 @@ public class Parser {
 		
 		int num = Integer.parseInt(require(NUMPAT, "Expecting [0-9]", s));
 		NumberNode numberNode = new NumberNode(num);
-		require(CLOSEPAREN, "Expecting ')' ",s);
 		
 		return numberNode;
+	}
+	
+	/**
+	 * OP ::= add | sub | mul | div
+	 */
+	static OPNode parseOP(Scanner s){
+		
+		OPNode op = null;
+		
+		if(checkFor("add", s))				op = new AddNode();
+		else if(checkFor("sub", s))			op = new SubNode();
+		else if(checkFor("mul", s))			op = new MultNode();
+		else if(checkFor("div", s))			op = new DivNode();
+		
+		return op;
+	}
+	
+	/**
+	 * EXP   ::= NUM | SEN | OP ( EXP, EXP )
+	 * */
+	static ExpressionNode parseEXP(Scanner s){
+		
+		ExpressionNode exp = null;
+		
+		if(s.hasNext(SENSOR))				exp = parseSensor(s);
+		else if(s.hasNext(NUMPAT))			exp = parseNumber(s);
+		
+		else if(s.hasNext(OPERATORS)){
+			
+			OPNode op = parseOP(s);
+			require(OPENPAREN, "Expecting '('", s);
+			ExpressionNode e1 = parseEXP(s);
+			require(",", "Expecting ',' ", s);
+			ExpressionNode e2 = parseEXP(s);
+			exp = new OPNodeExpr(op, e1, e2);
+			require(CLOSEPAREN, "Expecting ')'", s);
+			
+		}
+		else
+			fail("Expecting SEN|NUM|OPEXP", s);
+		
+		return exp;
 	}
 
 	/**
@@ -325,15 +447,34 @@ public class Parser {
 //=================================================================//
 class MoveNode implements ActionNode{
 
-	int moveSteps = 0;
+	ExpressionNode exp;
+
+	public MoveNode(){}			
+	public MoveNode(ExpressionNode exp){			//Optional Argument
+		this.exp = exp;
+	}
 
 	@Override
 	public void execute(Robot robot) {
-		robot.move();
+		
+		if(exp!=null){
+			int i = 0, e = exp.evaluate(robot);		//Number of Steps
+			while( i < e ){
+				robot.move();
+				i++;
+			}
+		}
+		else
+			robot.move();
+		
+		
 	}
 
 	public String toString(){
-		return "Move;";
+		if(exp!=null)
+			return "Move("+this.exp+")";
+		else
+			return "Move;";
 	}
 
 }
@@ -379,15 +520,35 @@ class TakeFuelNode implements ActionNode{
 }
 class WaitNode implements ActionNode{
 
-	int waitAmount = 0;
+	ExpressionNode exp;
 
+	public WaitNode(){}
+	public WaitNode(ExpressionNode exp){
+		this.exp = exp;
+	}
+	
 	@Override
 	public void execute(Robot robot) {
-		robot.idleWait();
+		
+		if(exp!=null){
+			int i = 0, e = exp.evaluate(robot);
+			while( i < e){
+				robot.idleWait();
+				i++;
+			}
+		}
+		else
+			robot.idleWait();
 	}
 
 	public String toString(){
-		return "Wait;";
+		
+		if(exp!=null)
+			return "Wait("+this.exp+")";
+		else
+			return "Wait;";
+		
+		
 	}
 
 }
@@ -463,22 +624,45 @@ class LoopNode implements StatementNode{
 class IFNode implements StatementNode{
 	
 	ConditionalNode condition;
-	BlockNode block;
+	BlockNode mainBlock, elseBlock;
 	
 	public IFNode(ConditionalNode c, BlockNode b){
 		this.condition = c;
-		this.block = b;
+		this.mainBlock = b;
 	}
 	
 	@Override
 	public void execute(Robot robot) {
-
-		if(condition.evaluate(robot))
-			block.execute(robot);
+		
+		if(elseBlock==null){
+			if(condition.evaluate(robot))
+				mainBlock.execute(robot);
+		}
+		else if(elseBlock!=null){
+			
+			if(condition.evaluate(robot))
+				mainBlock.execute(robot);
+			elseBlock.execute(robot);
+		}
+	}
+	
+	public void setElseBlock(BlockNode e){
+		this.elseBlock = e;
 	}
 	
 	public String toString(){
-		return "if ("+this.condition +" )"+ this.block;
+		
+		String ifString = null;
+		if(elseBlock!=null){
+			String tabRepeat = new String(new char[Parser.depthCounter]).replace("\0", "\t");
+			ifString =  "if("+this.condition +")"+ this.mainBlock +"\n"+tabRepeat+
+					"else"+ this.elseBlock;
+		}
+		else if(elseBlock==null)
+			ifString = "if ("+this.condition +")"+ this.mainBlock;
+			
+		return ifString;
+		
 	}
 	
 	
@@ -502,7 +686,7 @@ class WhileNode implements StatementNode{
 	}
 	
 	public String toString(){
-		return "while ( "+this.condition + " )" +this.block;
+		return "while( "+this.condition + ")" +this.block;
 	}
 	
 	
@@ -514,19 +698,19 @@ interface ConditionalNode{
 
 class GreaterThanNode implements ConditionalNode{
 	
-	SensorNode sen;
-	NumberNode num;
+	ExpressionNode left;
+	ExpressionNode right;
 	
-	public GreaterThanNode(SensorNode sen, NumberNode num){
-		this.sen = sen;
-		this.num = num;
+	public GreaterThanNode(ExpressionNode left, ExpressionNode right){
+		this.left = left;
+		this.right = right;
 	}
 	
 	@Override
 	public boolean evaluate(Robot robot) {
-
+		
 		boolean bool = false;
-		if(sen.evaluate(robot) > num.getNum())
+		if(left.evaluate(robot) > right.evaluate(robot))
 			bool = true;
 		else
 			bool = false;
@@ -535,24 +719,24 @@ class GreaterThanNode implements ConditionalNode{
 	}
 	
 	public String toString(){
-		return "gt( "+sen.toString()+" , "+ num.getNum() + " )";
+		return "gt( "+left+", "+right+ ")";
 	}
 }
 class LessThanNode implements ConditionalNode{
 	
-	SensorNode sen;
-	NumberNode num;
+	ExpressionNode left;
+	ExpressionNode right;
 	
-	public LessThanNode(SensorNode sen, NumberNode num){
-		this.sen = sen;
-		this.num = num;
-	}	
+	public LessThanNode(ExpressionNode left, ExpressionNode right){
+		this.left = left;
+		this.right = right;
+	}
 	
 	@Override
 	public boolean evaluate(Robot robot) {
 		
 		boolean bool = false;
-		if(sen.evaluate(robot) < num.getNum())
+		if(left.evaluate(robot) < right.evaluate(robot))
 			bool = true;
 		else
 			bool = false;
@@ -561,24 +745,24 @@ class LessThanNode implements ConditionalNode{
 	}
 	
 	public String toString(){
-		return "lt( "+sen.toString()+" , "+ num.getNum() + " )";
+		return "lt( "+left+", "+right+ ")";
 	}
 }
 class EqualsNode implements ConditionalNode{
 	
-	SensorNode sen;
-	NumberNode num;
+	ExpressionNode left;
+	ExpressionNode right;
 	
-	public EqualsNode(SensorNode sen, NumberNode num){
-		this.sen = sen;
-		this.num = num;
+	public EqualsNode(ExpressionNode left, ExpressionNode right){
+		this.left = left;
+		this.right = right;
 	}
 	
 	@Override
 	public boolean evaluate(Robot robot) {
 		
 		boolean bool = false;
-		if(sen.evaluate(robot) == num.getNum())
+		if(left.evaluate(robot) == right.evaluate(robot))
 			bool = true;
 		else
 			bool = false;
@@ -587,7 +771,86 @@ class EqualsNode implements ConditionalNode{
 	}
 	
 	public String toString(){
-		return "eq( "+sen.toString()+" , "+ num.getNum() + " )";
+		return "eq( "+left+", "+right+ ")";
+	}
+}
+
+class AndNode implements ConditionalNode{
+	
+	ConditionalNode left;
+	ConditionalNode right;
+	
+	public AndNode(ConditionalNode left, ConditionalNode right){
+		this.left = left;
+		this.right = right;
+	}
+	
+	@Override
+	public boolean evaluate(Robot robot) {
+		
+		boolean bool = false;
+		if(left.evaluate(robot) && right.evaluate(robot))
+			bool = true;
+		else
+			bool = false;
+		
+		return bool;
+	}
+	
+	public String toString(){
+		return "and( "+left+", "+ right + ")";
+	}
+}
+
+class OrNode implements ConditionalNode{
+	
+	ConditionalNode left;
+	ConditionalNode right;
+	
+	public OrNode(ConditionalNode left, ConditionalNode right){
+		this.left = left;
+		this.right = right;
+	}
+	
+	@Override
+	public boolean evaluate(Robot robot) {
+		
+		boolean bool = false;
+		if(left.evaluate(robot) || right.evaluate(robot))
+			bool = true;
+		else
+			bool = false;
+		
+		return bool;
+	}
+	
+	public String toString(){
+		return "or( "+left+", "+ right + ")";
+	}
+}
+
+class NotNode implements ConditionalNode{
+	
+	ConditionalNode cond;
+	
+	public NotNode(ConditionalNode cond){
+		this.cond = cond;
+	}
+	
+	@Override
+	public boolean evaluate(Robot robot) {
+		
+		boolean bool = false;
+		if(!cond.evaluate(robot))
+			bool = true;
+		else
+			bool = false;
+		
+		return bool;
+	}
+	
+	public String toString(){
+		return "not( "+cond+")";
 	}
 }
 
@@ -653,9 +916,13 @@ class BlockNode implements StatementNode{
 }
 
 //==================================================================//
-//=========================SENSOR + NUM=============================//
+//========================SENSOR + NUM + OP=========================//
 //=================================================================//
-interface SensorNode{	
+interface ExpressionNode{
+	public int evaluate(Robot robot);
+}
+
+interface SensorNode extends ExpressionNode{	
 	public int evaluate(Robot robot);
 }
 
@@ -738,7 +1005,7 @@ class WallDistNode implements SensorNode{
 		return "WallDist";
 	}
 }
-class NumberNode{
+class NumberNode implements ExpressionNode{
 	
 	int num;
 	
@@ -749,7 +1016,120 @@ class NumberNode{
 	public int getNum(){
 		return num;
 	}
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+	
+	public String toString(){
+		return Integer.toString(num);
+	}
 }
+
+interface OPNode extends ExpressionNode{ 
+	public String getOP();
+}
+class AddNode implements OPNode{
+
+	@Override
+	public String getOP() {
+		return "add";
+	}
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+	
+	public String toString(){
+		return "add";
+	}
+}
+class SubNode implements OPNode{
+
+	@Override
+	public String getOP() {
+		return "sub";
+	}
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+	
+	public String toString(){
+		return "sub";
+	}
+}
+class MultNode implements OPNode{
+
+	@Override
+	public String getOP() {
+		return "mul";
+	}
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+	
+	public String toString(){
+		return "mult";
+	}
+}
+class DivNode implements OPNode{
+
+	@Override
+	public String getOP() {
+		return "div";
+	}
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+	
+	public String toString(){
+		return "div";
+	}
+}
+
+class OPNodeExpr implements ExpressionNode{
+
+	OPNode op;
+	ExpressionNode left, right;
+	
+	public OPNodeExpr(OPNode op, ExpressionNode left, ExpressionNode right){
+		this.op = op;
+		this.left = left;
+		this.right = right;
+	}
+	
+	@Override
+	public int evaluate(Robot robot) {
+		
+		int eval = 0;
+		
+		if(op.getClass() == AddNode.class)			eval = left.evaluate(robot) + right.evaluate(robot);
+		else if(op.getClass() == SubNode.class)  	eval = left.evaluate(robot) - right.evaluate(robot);
+		else if(op.getClass() == MultNode.class)	eval = left.evaluate(robot) * right.evaluate(robot);
+		else if(op.getClass() == DivNode.class)		eval = left.evaluate(robot) / right.evaluate(robot);
+		
+		return eval;
+	}
+	
+	public String toString(){
+		return op.toString() + "(" + left.toString() + ", " + right.toString() + ")";
+	}
+	
+}
+
 
 //==================================================================//
 //============================PROGRAM===============================//
