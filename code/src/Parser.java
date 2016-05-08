@@ -13,7 +13,10 @@ import sun.util.locale.ParseStatus;
  */
 public class Parser {
 
-	static int depthCounter = 0;		//Used for nested loop alignment
+	//Used for nested loop alignment
+	static int depthCounter = 0;
+	//A map of all variables
+	static Map<VariableNode, ExpressionNode> variablesMap = new HashMap<VariableNode, ExpressionNode>();
 	
 	/**
 	 * Top level parse method, called by the World
@@ -88,7 +91,8 @@ public class Parser {
 	static Pattern ACTION = Pattern.compile("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait");
 	static Pattern SENSOR = Pattern.compile("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist");
 	static Pattern OPERATORS = Pattern.compile("add|sub|mul|div");
-
+	static Pattern VARIABLES = Pattern.compile("\\$[A-Za-z][A-Za-z0-9]*");
+	
 	/**
 	 * PROG ::= STMT+
 	 */
@@ -106,7 +110,7 @@ public class Parser {
 	// utility methods for the parser
 
 	/**
-	 * STMT ::= ACT ; | LOOP
+	 * STMT ::= ACT ; | LOOP | IF | WHILE | ASSGN ; 
 	 * */
 	static StatementNode parseStatementNode(Scanner s){
 
@@ -116,11 +120,32 @@ public class Parser {
 		else if(checkFor("loop", s)) 		stmt = parseLoop(s);
 		else if(checkFor("while", s))		stmt = parseWhile(s);
 		else if(checkFor("if", s))			stmt = parseIf(s);
+		else if(s.hasNext(VARIABLES))		stmt = parseAssignmentNode(s);
 		else{
-			fail("Expecting ACT|LOOP|WHILE|IF", s);
+			fail("Expecting ACT|LOOP|WHILE|IF|VAR", s);
 		}
 
 		return stmt;
+	}
+	
+	/**
+	 * ASSGN ::= VAR = EXP
+	 * */
+	static AssignmentNode parseAssignmentNode(Scanner s){
+		
+		VariableNode var = parseVar(s);
+		require("=", "Expecting '='", s);
+		ExpressionNode exp = parseEXP(s);
+		require(";", "Expecting ';' ", s);
+		
+		//Add variable to global map of variables
+		variablesMap.put(var, exp);
+		
+		return new AssignmentNode(var, exp);
+	}
+	
+	static VariableNode parseVar(Scanner s){
+		return new VariableNode(require(VARIABLES, "Expecting \\$[A-Za-z][A-Za-z0-9]*", s));
 	}
 
 	/**
@@ -182,6 +207,14 @@ public class Parser {
 		
 		IFNode iN = new IFNode(condition, block);
 		
+		//Add elif blocks to list of elif's to process
+		while(checkFor("elif", s)){
+			require(OPENPAREN, "Expecting '('", s);
+			ConditionalNode c = parseCondition(s);
+			require(CLOSEPAREN, "Expecting ')'", s);
+			BlockNode b = parseBlock(s);
+			iN.elifBlocks.put(c, b);
+		}	
 		if(checkFor("else", s))		
 			iN.setElseBlock(parseBlock(s));
 		
@@ -266,7 +299,7 @@ public class Parser {
 	}
 	
 	/**
-	 * SEN ::= fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist
+	 * SEN ::= fuelLeft|oppLR|oppFB|numBarrels|barrelLR [( EXP )] | barrelFB [ ( EXP ) ]|wallDist
 	 * */
 	static SensorNode parseSensor(Scanner s){
 		
@@ -276,11 +309,24 @@ public class Parser {
 		else if(checkFor("oppLR", s))				sensor = new OppLRNode();
 		else if(checkFor("oppFB", s))				sensor = new OppFBNode();
 		else if(checkFor("numBarrels", s))			sensor = new NumBarrelsNode();
-		else if(checkFor("barrelFB", s))			sensor = new BarrelFBNode();
-		else if(checkFor("barrelLR", s))			sensor = new BarrelLRNode();
+		else if(checkFor("barrelFB", s)){
+			
+			if(checkFor(OPENPAREN, s)){
+				sensor = new BarrelFBNode(parseEXP(s));
+				require(CLOSEPAREN, "Expecting ')' ", s);
+			}else
+				sensor = new BarrelFBNode();
+		}	
+		else if(checkFor("barrelLR", s)){
+			
+			if(checkFor(OPENPAREN, s)){
+				sensor = new BarrelLRNode(parseEXP(s));
+				require(CLOSEPAREN, "Expecting ')' ", s);
+			}else
+				sensor = new BarrelLRNode();
+		}			
 		else if(checkFor("wallDist", s))			sensor = new WallDistNode();
-//		else
-//			fail("Expecting fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist", s);
+
 
 		return sensor;
 	}
@@ -312,7 +358,7 @@ public class Parser {
 	}
 	
 	/**
-	 * EXP   ::= NUM | SEN | OP ( EXP, EXP )
+	 * EXP   ::= NUM | SEN | OP ( EXP, EXP ) | VAR
 	 * */
 	static ExpressionNode parseEXP(Scanner s){
 		
@@ -332,11 +378,13 @@ public class Parser {
 			require(CLOSEPAREN, "Expecting ')'", s);
 			
 		}
+		else if(s.hasNext(VARIABLES))		exp = parseVar(s);
 		else
-			fail("Expecting SEN|NUM|OPEXP", s);
+			fail("Expecting SEN|NUM|VAR|OPEXP", s);
 		
 		return exp;
 	}
+	
 
 	/**
 	 * BLOCK :: = { STMT+ }
@@ -624,24 +672,48 @@ class LoopNode implements StatementNode{
 class IFNode implements StatementNode{
 	
 	ConditionalNode condition;
+	Map<ConditionalNode, BlockNode> elifBlocks;		//List of elseIf Blocks *
 	BlockNode mainBlock, elseBlock;
 	
 	public IFNode(ConditionalNode c, BlockNode b){
 		this.condition = c;
 		this.mainBlock = b;
+		this.elifBlocks = new HashMap<ConditionalNode, BlockNode>();
 	}
 	
 	@Override
 	public void execute(Robot robot) {
 		
-		if(elseBlock==null){
+		//IF
+		if(elifBlocks.size() == 0 && elseBlock == null){
 			if(condition.evaluate(robot))
 				mainBlock.execute(robot);
 		}
-		else if(elseBlock!=null){
-			
+		//IF|ELSE
+		else if(elifBlocks.size() == 0 && elseBlock != null){
 			if(condition.evaluate(robot))
 				mainBlock.execute(robot);
+			elseBlock.execute(robot);
+		}
+		//IF|ELIF
+		else if(elifBlocks.size() > 0 && elseBlock == null){
+			if(condition.evaluate(robot))
+				mainBlock.execute(robot);
+			for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
+				if(e.getKey().evaluate(robot)){
+					e.getValue().execute(robot);
+				}
+			}
+		}
+		//IF|ELIF|ELSE
+		else{
+			if(condition.evaluate(robot))
+				mainBlock.execute(robot);
+			for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
+				if(e.getKey().evaluate(robot)){
+					e.getValue().execute(robot);
+				}
+			}
 			elseBlock.execute(robot);
 		}
 	}
@@ -972,6 +1044,13 @@ class NumBarrelsNode implements SensorNode{
 }
 class BarrelLRNode implements SensorNode{
 
+	ExpressionNode exp;
+	
+	public BarrelLRNode(){}
+	public BarrelLRNode(ExpressionNode exp){
+		this.exp = exp;
+	}
+	
 	@Override
 	public int evaluate(Robot robot) {
 		int n = robot.getClosestBarrelLR();
@@ -979,11 +1058,23 @@ class BarrelLRNode implements SensorNode{
 	}
 	
 	public String toString(){
-		return "BarrelLR";
+		
+		if(exp!=null)
+			return "BarrelLR("+this.exp+")";
+		else
+			return "BarrelLR";
+		
 	}
 }
 class BarrelFBNode implements SensorNode{
 
+	ExpressionNode exp;
+	
+	public BarrelFBNode(){}
+	public BarrelFBNode(ExpressionNode exp){
+		this.exp = exp;
+	}
+	
 	@Override
 	public int evaluate(Robot robot) {
 		int n = robot.getClosestBarrelFB();
@@ -991,7 +1082,11 @@ class BarrelFBNode implements SensorNode{
 	}
 	
 	public String toString(){
-		return "BarrelFB";
+		
+		if(exp!=null)
+			return "BarreFB("+this.exp+")";
+		else
+			return "BarrelFB";
 	}
 }
 class WallDistNode implements SensorNode{
@@ -1126,6 +1221,69 @@ class OPNodeExpr implements ExpressionNode{
 	
 	public String toString(){
 		return op.toString() + "(" + left.toString() + ", " + right.toString() + ")";
+	}
+	
+}
+
+class VariableNode implements ExpressionNode{
+	
+	String value = "0";
+	boolean isInt = false;
+	boolean isString = false;
+	
+	
+	public VariableNode(String value){
+		
+		this.value = value;
+		
+		//Recognize if value is int or string?
+		if(value.matches("\\d"))
+			isInt = true;
+		else if(value.matches("A-Z|a-z"))
+			isString = true;
+	}
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		for(Map.Entry<VariableNode, ExpressionNode> e : Parser.variablesMap.entrySet()){
+			if(value == e.getKey().value){
+				return ((NumberNode)e.getValue()).num;
+			}
+		}
+		
+		return 0;
+	}
+	
+	public String toString(){
+		return value;
+	}
+}
+
+class AssignmentNode implements StatementNode{
+
+	VariableNode var;
+	ExpressionNode exp;
+	
+	public AssignmentNode(VariableNode var, ExpressionNode exp){
+		
+		this.var = var;
+		this.exp = exp;
+		
+		//Update Map - Assign VAR = EXP
+		Parser.variablesMap.remove(var);
+		Parser.variablesMap.put(var, exp);
+				
+	}
+	
+	@Override
+	public void execute(Robot robot) {
+		// TODO Auto-generated method stub
+		
+	}
+	
+	public String toString(){
+		return var + " = " + exp;
 	}
 	
 }
