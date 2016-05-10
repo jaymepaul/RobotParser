@@ -1,0 +1,56 @@
+while(((fuelLeft > ( (((5 / (1 + 4)) * -1) -1) )) || (1 == 0) )){
+	shieldOff;
+	$numBar = numBarrels;
+	$empty = 0;
+	$spurious = $numbar + $empty;
+	$spurious = $spurious * $empty;
+
+	if((!(!($numBar == 0)))){
+
+		$thresh = 0;
+		if( (oppLR == $thresh) && (oppFB == 1)){
+			takeFuel;
+		} else{
+			if((oppLR == 0) && (oppFB == -1)){
+				if(wallDist > 0){
+					move;
+				}
+				else{
+					shieldOn;
+				}
+			} else{
+				wait(1);
+			}
+		}
+	} else{
+		$first = 1;
+		if((barrelFB(1) == 0) && (barrelLR($first) == 0)){
+			takeFuel;
+		} elif ( $numBar > $numBar){
+			move(10);
+		} elif ( (barrelLR((numBarrels - 1)) < -45) ){
+			move(barrelFB(3));
+		} else{
+			if( 0 == barrelFB){
+				if( barrelLR < 0){
+					turnL;
+				}
+				else{
+					turnR;
+				}
+			} else{
+				if( barrelFB > 0){
+					if( barrelFB > 1){
+						move( barrelFB / 2);
+					}
+					else{
+						move;
+					}
+				} else{
+					turnAround;
+				}
+			}
+		}
+	}
+}
+

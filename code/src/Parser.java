@@ -16,7 +16,7 @@ public class Parser {
 	//Used for nested loop alignment
 	static int depthCounter = 0;
 	//A map of all variables
-	static Map<VariableNode, Integer> variablesMap; 
+	static Map<VariableNode, Integer> variablesMap;
 
 	/**
 	 * Top level parse method, called by the World
@@ -25,7 +25,7 @@ public class Parser {
 		Scanner scan = null;
 		try {
 			scan = new Scanner(code);
-			
+
 			//Initialize Variables Map
 			variablesMap = new HashMap<VariableNode, Integer>();
 
@@ -141,7 +141,7 @@ public class Parser {
 		require("=", "Expecting '='", s);
 		ExpressionNode exp = parseEXP(s);
 		require(";", "Expecting ';' ", s);
-		
+
 		return new AssignmentNode(var, exp);
 	}
 
@@ -709,7 +709,7 @@ class IFNode implements StatementNode{
 				mainBlock.execute(robot);
 			else if(!condition.evaluate(robot))
 				elseBlock.execute(robot);
-			
+
 		}
 		//IF|ELIF
 		else if(elifBlocks.size() > 0 && elseBlock == null){
@@ -733,6 +733,7 @@ class IFNode implements StatementNode{
 					if(e.getKey().evaluate(robot)){
 						e.getValue().execute(robot);
 						bool = true;
+						break;
 					}
 				}
 				if(!bool)
@@ -821,7 +822,7 @@ class GreaterThanNode implements ConditionalNode{
 
 		int l = left.evaluate(robot);
 		int r = right.evaluate(robot);
-		
+
 		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
 			if(e.getKey().value.equals(left.toString()))
 				l = e.getValue();
@@ -1099,12 +1100,6 @@ class BarrelLRNode implements SensorNode{
 		if(exp!=null){
 
 			int step = exp.evaluate(robot);
-			
-			for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
-				if(e.getKey().value.equals(exp.toString()))
-					step = e.getValue();
-			}
-		
 			return robot.getBarrelLR(step);
 		}
 		else
@@ -1136,11 +1131,6 @@ class BarrelFBNode implements SensorNode{
 		if(exp!=null){
 
 			int step = exp.evaluate(robot);
-			for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
-				if(e.getKey().value.equals(exp.toString()))
-					step = e.getValue();
-			}
-			
 			return robot.getBarrelFB(step);
 		}
 		else
@@ -1309,7 +1299,7 @@ class VariableNode implements ExpressionNode{
 
 	@Override
 	public int evaluate(Robot robot) {
-		
+
 		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
 			if(this.value.equals(e.getKey().value)){
 				return e.getValue();
@@ -1350,7 +1340,7 @@ class AssignmentNode implements StatementNode{
 				break;
 			}
 		}
-		
+
 		if(bool){
 			int val = exp.evaluate(robot);
 			Parser.variablesMap.remove(vb);
@@ -1358,13 +1348,116 @@ class AssignmentNode implements StatementNode{
 		}
 		else if(!bool)
 			Parser.variablesMap.put(var, exp.evaluate(robot));
-			
+
 	}
 
 	public String toString(){
 		return var + " = " + exp;
 	}
 
+}
+
+class BoolNode implements ConditionalNode{
+
+	String cond;
+
+	public BoolNode(String cond){
+		this.cond = cond;
+	}
+
+	public boolean evaluate(Robot robot){
+
+		if(cond.equals("true"))
+			return true;
+		else
+			return false;
+	}
+}
+
+interface CompNode{}
+class LTCompNode implements CompNode{}
+class LTEQCompNode implements CompNode{}
+class GTCompNode implements CompNode{}
+class GTEQCompNode implements CompNode{}
+class EQCompNode implements CompNode{}
+class NEQCompNode implements CompNode{}
+
+interface LogicNode{}
+class ANDLogicNode implements LogicNode{}
+class ORLogicNode implements LogicNode{}
+class NOTLogicNode implements LogicNode{}
+
+class AddSymbolNode implements OPNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public String getOP() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public String toString(){
+		return "+";
+	}
+}
+class SubSymbolNode implements OPNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public String getOP() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public String toString(){
+		return "-";
+	}
+}
+class MulSymbolNode implements OPNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public String getOP() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public String toString(){
+		return "*";
+	}
+}
+class DivSymbolNode implements OPNode{
+
+	@Override
+	public int evaluate(Robot robot) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public String getOP() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public String toString(){
+		return "/";
+	}
 }
 
 
