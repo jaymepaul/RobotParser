@@ -16,7 +16,7 @@ public class Parser {
 	//Used for nested loop alignment
 	static int depthCounter = 0;
 	//A map of all variables
-	static Map<VariableNode, Integer> variablesMap = new HashMap<VariableNode, Integer>();
+	static Map<VariableNode, Integer> variablesMap; 
 
 	/**
 	 * Top level parse method, called by the World
@@ -25,6 +25,9 @@ public class Parser {
 		Scanner scan = null;
 		try {
 			scan = new Scanner(code);
+			
+			//Initialize Variables Map
+			variablesMap = new HashMap<VariableNode, Integer>();
 
 			// the only time tokens can be next to each other is
 			// when one of them is one of (){},;
@@ -138,18 +141,12 @@ public class Parser {
 		require("=", "Expecting '='", s);
 		ExpressionNode exp = parseEXP(s);
 		require(";", "Expecting ';' ", s);
-
+		
 		return new AssignmentNode(var, exp);
 	}
 
 	static VariableNode parseVar(Scanner s){
-
-		VariableNode var = new VariableNode(require(VARIABLES, "Expecting \\$[A-Za-z][A-Za-z0-9]*", s));
-
-		//Add variable to map - initialize to 0
-		Parser.variablesMap.put(var, 0);
-
-		return var;
+		return new VariableNode(require(VARIABLES, "Expecting \\$[A-Za-z][A-Za-z0-9]*", s));
 	}
 
 	/**
@@ -511,11 +508,13 @@ class MoveNode implements ActionNode{
 		if(exp!=null){
 
 			int step = exp.evaluate(robot);
-			if(Parser.variablesMap.containsKey(exp))
-				step = Parser.variablesMap.get(exp);
+			for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+				if(e.getKey().value.equals(exp.toString()))
+					step = e.getValue();
+			}
 
-			int i = 0, e = step;		//Number of Steps
-			while( i < e ){
+			int i = 0;
+			while( i < step ){
 				robot.move();
 				i++;
 			}
@@ -589,11 +588,13 @@ class WaitNode implements ActionNode{
 		if(exp!=null){
 
 			int step = exp.evaluate(robot);
-			if(Parser.variablesMap.containsKey(exp))
-				step = Parser.variablesMap.get(exp);
+			for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+				if(e.getKey().value.equals(exp.toString()))
+					step = e.getValue();
+			}
 
-			int i = 0, e = step;
-			while( i < e){
+			int i = 0;
+			while( i < step){
 				robot.idleWait();
 				i++;
 			}
@@ -706,15 +707,19 @@ class IFNode implements StatementNode{
 		else if(elifBlocks.size() == 0 && elseBlock != null){
 			if(condition.evaluate(robot))
 				mainBlock.execute(robot);
-			elseBlock.execute(robot);
+			else if(!condition.evaluate(robot))
+				elseBlock.execute(robot);
+			
 		}
 		//IF|ELIF
 		else if(elifBlocks.size() > 0 && elseBlock == null){
 			if(condition.evaluate(robot))
 				mainBlock.execute(robot);
-			for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
-				if(e.getKey().evaluate(robot)){
-					e.getValue().execute(robot);
+			else if(!condition.evaluate(robot)){
+				for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
+					if(e.getKey().evaluate(robot)){
+						e.getValue().execute(robot);
+					}
 				}
 			}
 		}
@@ -722,12 +727,17 @@ class IFNode implements StatementNode{
 		else{
 			if(condition.evaluate(robot))
 				mainBlock.execute(robot);
-			for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
-				if(e.getKey().evaluate(robot)){
-					e.getValue().execute(robot);
+			else{
+				boolean bool = false;
+				for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
+					if(e.getKey().evaluate(robot)){
+						e.getValue().execute(robot);
+						bool = true;
+					}
 				}
+				if(!bool)
+					elseBlock.execute(robot);
 			}
-			elseBlock.execute(robot);
 		}
 	}
 
@@ -781,7 +791,7 @@ class WhileNode implements StatementNode{
 
 	@Override
 	public void execute(Robot robot) {
-		if(condition.evaluate(robot))
+		while(condition.evaluate(robot))
 			block.execute(robot);
 	}
 
@@ -811,11 +821,13 @@ class GreaterThanNode implements ConditionalNode{
 
 		int l = left.evaluate(robot);
 		int r = right.evaluate(robot);
-
-		if(Parser.variablesMap.containsKey(left))
-			l = Parser.variablesMap.get(left);
-		if(Parser.variablesMap.containsKey(right))
-			r = Parser.variablesMap.get(right);
+		
+		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+			if(e.getKey().value.equals(left.toString()))
+				l = e.getValue();
+			if(e.getKey().value.equals(right.toString()))
+				r = e.getValue();
+		}
 
 		if( l > r)
 			return true;
@@ -844,10 +856,12 @@ class LessThanNode implements ConditionalNode{
 		int l = left.evaluate(robot);
 		int r = right.evaluate(robot);
 
-		if(Parser.variablesMap.containsKey(left))
-			l = Parser.variablesMap.get(left);
-		if(Parser.variablesMap.containsKey(right))
-			r = Parser.variablesMap.get(right);
+		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+			if(e.getKey().value.equals(left.toString()))
+				l = e.getValue();
+			if(e.getKey().value.equals(right.toString()))
+				r = e.getValue();
+		}
 
 		if( l < r)
 			return true;
@@ -875,10 +889,12 @@ class EqualsNode implements ConditionalNode{
 		int l = left.evaluate(robot);
 		int r = right.evaluate(robot);
 
-		if(Parser.variablesMap.containsKey(left))
-			l = Parser.variablesMap.get(left);
-		if(Parser.variablesMap.containsKey(right))
-			r = Parser.variablesMap.get(right);
+		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+			if(e.getKey().value.equals(left.toString()))
+				l = e.getValue();
+			if(e.getKey().value.equals(right.toString()))
+				r = e.getValue();
+		}
 
 		if( l == r)
 			return true;
@@ -904,13 +920,10 @@ class AndNode implements ConditionalNode{
 	@Override
 	public boolean evaluate(Robot robot) {
 
-		boolean bool = false;
 		if(left.evaluate(robot) && right.evaluate(robot))
-			bool = true;
+			return true;
 		else
-			bool = false;
-
-		return bool;
+			return false;
 	}
 
 	public String toString(){
@@ -931,13 +944,10 @@ class OrNode implements ConditionalNode{
 	@Override
 	public boolean evaluate(Robot robot) {
 
-		boolean bool = false;
 		if(left.evaluate(robot) || right.evaluate(robot))
-			bool = true;
+			return true;
 		else
-			bool = false;
-
-		return bool;
+			return false;
 	}
 
 	public String toString(){
@@ -956,13 +966,11 @@ class NotNode implements ConditionalNode{
 	@Override
 	public boolean evaluate(Robot robot) {
 
-		boolean bool = false;
-		if(!cond.evaluate(robot))
-			bool = true;
+		if(cond.evaluate(robot))
+			return true;
 		else
-			bool = false;
+			return false;
 
-		return bool;
 	}
 
 	public String toString(){
@@ -1001,16 +1009,6 @@ class BlockNode implements StatementNode{
 	public String toString(){
 
 		StringBuilder sb = new StringBuilder();
-
-		//HOW MUCH TO TAB BY BASED ON HOW NESTED THE BLOCK IS??
-		// - Global Depth Counter , Start at 1 - if its a block should be tabbed by 1
-		// - When new Block is created increment by 1, set its tabCounter
-		// - When Block is finished reset to 0
-		// - How to tab x amount of times	repeated = new String(new char[n]).replace("\0", s);
-		// - n = number of times to repeat, s = string to repeat
-		// - i.e. String tabRepeat = new String(new char[n]).replace("\0", "\t");
-		// n = globalDepthCount;
-
 		String tabRepeat = null;
 
 		Parser.depthCounter++;
@@ -1046,9 +1044,6 @@ class FuelLeftNode implements SensorNode{
 
 	@Override
 	public int evaluate(Robot robot) {
-
-
-
 		return robot.getFuel();
 	}
 
@@ -1104,13 +1099,16 @@ class BarrelLRNode implements SensorNode{
 		if(exp!=null){
 
 			int step = exp.evaluate(robot);
-			if(Parser.variablesMap.containsKey(exp))
-				step = Parser.variablesMap.get(exp);
-
+			
+			for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+				if(e.getKey().value.equals(exp.toString()))
+					step = e.getValue();
+			}
+		
 			return robot.getBarrelLR(step);
 		}
 		else
-			return robot.getBarrelLR(robot.getClosestBarrelLR());
+			return robot.getClosestBarrelLR();
 
 	}
 
@@ -1138,19 +1136,21 @@ class BarrelFBNode implements SensorNode{
 		if(exp!=null){
 
 			int step = exp.evaluate(robot);
-			if(Parser.variablesMap.containsKey(exp))
-				step = Parser.variablesMap.get(exp);
-
+			for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+				if(e.getKey().value.equals(exp.toString()))
+					step = e.getValue();
+			}
+			
 			return robot.getBarrelFB(step);
 		}
 		else
-			return robot.getBarrelFB(robot.getClosestBarrelFB());
+			return robot.getClosestBarrelFB();
 	}
 
 	public String toString(){
 
 		if(exp!=null)
-			return "BarreFB("+this.exp+")";
+			return "BarrelFB("+this.exp+")";
 		else
 			return "BarrelFB";
 	}
@@ -1180,8 +1180,7 @@ class NumberNode implements ExpressionNode{
 
 	@Override
 	public int evaluate(Robot robot) {
-		// TODO Auto-generated method stub
-		return 0;
+		return num;
 	}
 
 	public String toString(){
@@ -1278,14 +1277,14 @@ class OPNodeExpr implements ExpressionNode{
 		int l = left.evaluate(robot);
 		int r = right.evaluate(robot);
 
-		if(Parser.variablesMap.containsKey(left))
-			l = Parser.variablesMap.get(left);
-		if(Parser.variablesMap.containsKey(right))
-			r = Parser.variablesMap.get(right);
-
+		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+			if(e.getKey().value.equals(left.toString()))
+				l = e.getValue();
+			if(e.getKey().value.equals(right.toString()))
+				r = e.getValue();
+		}
 
 		int eval = 0;
-
 		if(op.getClass() == AddNode.class)			eval = l + r;
 		else if(op.getClass() == SubNode.class)  	eval = l - r;
 		else if(op.getClass() == MultNode.class)	eval = l * r;
@@ -1305,17 +1304,16 @@ class VariableNode implements ExpressionNode{
 	String value = "0";
 
 	public VariableNode(String value){
-
 		this.value = value;
-
 	}
 
 	@Override
 	public int evaluate(Robot robot) {
-		// TODO Auto-generated method stub
+		
 		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
-			if(this == e.getKey())
+			if(this.value.equals(e.getKey().value)){
 				return e.getValue();
+			}
 		}
 
 		return 0;
@@ -1343,9 +1341,24 @@ class AssignmentNode implements StatementNode{
 		// TODO Auto-generated method stub
 
 		//Update Map - Assign VAR = EXP
-		Parser.variablesMap.remove(var);
-		Parser.variablesMap.put(var, exp.evaluate(robot));
-
+		boolean bool = false;
+		VariableNode vb = null;
+		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
+			if(e.getKey().value.equals(var.value)){
+				vb = e.getKey();
+				bool = true;
+				break;
+			}
+		}
+		
+		if(bool){
+			int val = exp.evaluate(robot);
+			Parser.variablesMap.remove(vb);
+			Parser.variablesMap.put(var, val);
+		}
+		else if(!bool)
+			Parser.variablesMap.put(var, exp.evaluate(robot));
+			
 	}
 
 	public String toString(){
