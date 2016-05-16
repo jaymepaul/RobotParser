@@ -69,7 +69,7 @@ public class Parser {
 		} else {
 			while (true) {
 				JFileChooser chooser = new JFileChooser(".");// System.getProperty("user.dir"));
-				int res = chooser.showOpenDialog(null);
+				int res = chooser.showOpenDialog(null);	
 				if (res != JFileChooser.APPROVE_OPTION) {
 					break;
 				}

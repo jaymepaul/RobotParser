@@ -1,0 +1,7 @@
+COMP261 - RobotParser Report
+
+Completed up to Stage3:
+	- Uses a HashMap of <VariableNode, Integer> to store, access and update variables within a global scope. 
+	- Has elif blocks - i.e. an IfNode consists of a list of elif blocks that are each executed if the main condition fails. 
+	- Takes in optional arguments for barrelFB(n) and barrelLR(n), note: encountered odd bug where both methods never returned 0 when on top of a fuel tank, added case to force return 0.
+	- Also take in optional arguments for move(n) and wait(n) - its execute method is called 'n' times.  
