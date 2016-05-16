@@ -126,7 +126,7 @@ public class Parser {
 		else if(checkFor("if", s))			stmt = parseIf(s);
 		else if(s.hasNext(VARIABLES))		stmt = parseAssignmentNode(s);
 		else{
-			fail("Expecting ACT|LOOP|WHILE|IF|VAR", s);
+			fail("Expecting ACT|LOOP|WHILE|IF|ASSGN ;", s);
 		}
 
 		return stmt;
@@ -725,8 +725,10 @@ class IFNode implements StatementNode{
 		}
 		//IF|ELIF|ELSE
 		else{
-			if(condition.evaluate(robot))
+			
+			if(condition.evaluate(robot)){
 				mainBlock.execute(robot);
+			}
 			else{
 				boolean bool = false;
 				for(Map.Entry<ConditionalNode, BlockNode> e : elifBlocks.entrySet()){
@@ -736,8 +738,9 @@ class IFNode implements StatementNode{
 						break;
 					}
 				}
-				if(!bool)
+				if(!bool){
 					elseBlock.execute(robot);
+				}
 			}
 		}
 	}
@@ -967,7 +970,7 @@ class NotNode implements ConditionalNode{
 	@Override
 	public boolean evaluate(Robot robot) {
 
-		if(cond.evaluate(robot))
+		if(!(cond.evaluate(robot)))
 			return true;
 		else
 			return false;
@@ -1098,9 +1101,14 @@ class BarrelLRNode implements SensorNode{
 	public int evaluate(Robot robot) {
 
 		if(exp!=null){
-
+		
 			int step = exp.evaluate(robot);
-			return robot.getBarrelLR(step);
+
+			if(robot.getClosestBarrelLR() == 0 && robot.getClosestBarrelFB() == 0)
+				return robot.getBarrelLR(0);
+			else
+				return robot.getBarrelLR(step);
+			
 		}
 		else
 			return robot.getClosestBarrelLR();
@@ -1129,9 +1137,14 @@ class BarrelFBNode implements SensorNode{
 	public int evaluate(Robot robot) {
 
 		if(exp!=null){
-
+			
 			int step = exp.evaluate(robot);
-			return robot.getBarrelFB(step);
+			
+			if(robot.getClosestBarrelLR() == 0 && robot.getClosestBarrelFB() == 0)
+				return robot.getBarrelFB(0);
+			else
+				return robot.getBarrelFB(step);
+			
 		}
 		else
 			return robot.getClosestBarrelFB();
@@ -1291,7 +1304,7 @@ class OPNodeExpr implements ExpressionNode{
 
 class VariableNode implements ExpressionNode{
 
-	String value = "0";
+	String value = null;
 
 	public VariableNode(String value){
 		this.value = value;
@@ -1300,11 +1313,15 @@ class VariableNode implements ExpressionNode{
 	@Override
 	public int evaluate(Robot robot) {
 
+		
 		for(Map.Entry<VariableNode, Integer> e : Parser.variablesMap.entrySet()){
 			if(this.value.equals(e.getKey().value)){
 				return e.getValue();
 			}
 		}
+		
+		//Insert New Variable - Initialized to 0
+		Parser.variablesMap.put(new VariableNode(value), 0);
 
 		return 0;
 	}
